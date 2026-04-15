@@ -1,0 +1,93 @@
+# ------------------------------
+# ISOLATED MANUAL PHYSICAL TESTS
+# ------------------------------
+manual_test_lock = threading.Lock()
+manual_test_running = False
+machine_mode = "IDLE"   # IDLE / BUSY / MANUAL_TEST
+
+manual_test_status = {
+    "name": None,
+    "state": "IDLE"
+}
+
+MANUAL_TESTS = {
+    "door_lock_1": ("TEST_LOCK1_ON", "TEST_LOCK1_OFF", 5),
+    "door_lock_2": ("TEST_LOCK2_ON", "TEST_LOCK2_OFF", 5),
+    "door_lock_3": ("TEST_LOCK3_ON", "TEST_LOCK3_OFF", 5),
+    "pump":        ("TEST_PUMP_ON",  "TEST_PUMP_OFF",  5),
+    "valve":       ("TEST_VALVE_ON", "TEST_VALVE_OFF", 10),
+}
+
+def publish_manual_test_status(test_name, state):
+    """
+    Replace this with your actual website/backend callback if needed.
+    For now it prints to terminal and optionally sends SignalR status upstream.
+    """
+    manual_test_status["name"] = test_name
+    manual_test_status["state"] = state
+    print(f"[MANUAL TEST] {test_name} -> {state}")
+
+    try:
+        # Replace method name if your backend uses a different SignalR method
+        hub_connection.send("SendManualTestStatus", [machine_id, test_name, state])
+    except Exception as e:
+        print(f"[MANUAL TEST] Status publish skipped: {e}")
+
+def is_manual_test_safe():
+    return (
+        machine_mode == "IDLE"
+        and not manual_test_running
+        and not customer_cycle_running
+        and not auto_drain_active
+        and not global_auto_drain_active
+        and not weight_read_in_progress
+        and not pin25_on
+    )
+
+def _manual_test_worker(test_name):
+    global manual_test_running, machine_mode
+
+    on_cmd, off_cmd, duration = MANUAL_TESTS[test_name]
+
+    try:
+        manual_test_running = True
+        machine_mode = "MANUAL_TEST"
+        publish_manual_test_status(test_name, "RUNNING")
+
+        ack_on = send_to_arduino(on_cmd)
+        if not ack_on:
+            publish_manual_test_status(test_name, "FAILED")
+            return
+
+        time.sleep(duration)
+
+        send_to_arduino(off_cmd)
+        publish_manual_test_status(test_name, "DONE")
+
+    except Exception as e:
+        print(f"[MANUAL TEST] {test_name} error: {e}")
+        publish_manual_test_status(test_name, "FAILED")
+
+    finally:
+        manual_test_running = False
+        machine_mode = "IDLE"
+
+def trigger_manual_physical_test(test_name):
+    """
+    Entry point from website/SignalR commands.
+    Returns: RUNNING or BUSY
+    """
+    with manual_test_lock:
+        if test_name not in MANUAL_TESTS:
+            return "UNKNOWN_TEST"
+
+        if not is_manual_test_safe():
+            return "BUSY"
+
+        threading.Thread(
+            target=_manual_test_worker,
+            args=(test_name,),
+            daemon=True
+        ).start()
+
+        return "RUNNING"
