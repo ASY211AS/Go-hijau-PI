@@ -1,0 +1,28 @@
+def on_receive_command(command):
+    print(f"[COMMAND] Server says → {command}")
+
+    cmd = command[0] if isinstance(command, list) and command else command
+
+    match cmd:
+        case "CollectorEnd":
+            on_collector_end()
+
+        case "ManualTestDoorLock1":
+            result = trigger_manual_physical_test("door_lock_1")
+            publish_manual_test_status("door_lock_1", result)
+
+        case "ManualTestDoorLock2":
+            result = trigger_manual_physical_test("door_lock_2")
+            publish_manual_test_status("door_lock_2", result)
+
+        case "ManualTestDoorLock3":
+            result = trigger_manual_physical_test("door_lock_3")
+            publish_manual_test_status("door_lock_3", result)
+
+        case "ManualTestPump":
+            result = trigger_manual_physical_test("pump")
+            publish_manual_test_status("pump", result)
+
+        case "ManualTestValve":
+            result = trigger_manual_physical_test("valve")
+            publish_manual_test_status("valve", result)
