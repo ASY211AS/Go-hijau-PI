@@ -1,1 +1,68 @@
+def main():
+    global pin25_on, wd, TOKEN, machine_mode
 
+    def pre_restart():
+        try:
+            send_to_arduino("LOCK")
+        except:
+            pass
+
+    wd = Watchdog(timeout=120, pre_restart_callback=pre_restart)
+    threading.Thread(target=internet_monitor_loop, daemon=True).start()
+    threading.Thread(target=global_auto_drain_monitor, daemon=True).start()
+
+    hardware_startup_diagnosis(tared)
+
+    while True:
+        wd.kick()
+
+        # Do not accept QR while a manual test is running
+        if manual_test_running:
+            time.sleep(0.2)
+            continue
+
+        machine_mode = "IDLE"
+        TOKEN = wait_for_qr()
+        machine_mode = "BUSY"
+
+        try:
+            payload = {"qrToken": TOKEN, "machineId": machine_id, "action": "QR Scanned."}
+            create_machine_audit(payload)
+
+            panel_type = send_qr_to_api(TOKEN)
+            if not panel_type:
+                continue
+
+            if panel_type == "CUSTOMERPANEL":
+                mega_ser.reset_input_buffer()
+                mega_ser.write(b"get_led_status\n")
+                time.sleep(0.3)
+                led_status = mega_ser.readline().decode().strip()
+
+                if led_status == "LED_RED_ON":
+                    payload = {"qrToken": TOKEN, "machineId": machine_id, "action": "Customer cycle blocked - issue detected"}
+                    create_machine_audit(payload)
+                    send_to_arduino("LOCK")
+                    continue
+                else:
+                    payload = {"qrToken": TOKEN, "machineId": machine_id, "action": "Customer QR scanned"}
+                    create_machine_audit(payload)
+                    customer_cycle()
+
+            elif panel_type == "COLLECTORPANEL":
+                payload = {"qrToken": TOKEN, "machineId": machine_id, "action": "Collector QR scanned"}
+                create_machine_audit(payload)
+                collector_cycle()
+
+            elif panel_type == "TECHNICIANPANEL":
+                payload = {"qrToken": TOKEN, "machineId": machine_id, "action": "Technician QR scanned"}
+                create_machine_audit(payload)
+                technician_cycle()
+
+            else:
+                send_to_arduino("LOCK")
+
+            time.sleep(2)
+
+        finally:
+            machine_mode = "IDLE"
