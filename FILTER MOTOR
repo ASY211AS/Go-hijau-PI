@@ -1,0 +1,43 @@
+// Pin Definitions
+const int RPWM = 5; 
+const int LPWM = 6; 
+const int R_EN = 7; 
+const int L_EN = 8;
+
+void setup() {
+  Serial.begin(9600);
+  
+  pinMode(RPWM, OUTPUT);
+  pinMode(LPWM, OUTPUT);
+  pinMode(R_EN, OUTPUT);
+  pinMode(L_EN, OUTPUT);
+
+  // Enable the driver
+  digitalWrite(R_EN, HIGH);
+  digitalWrite(L_EN, HIGH);
+
+  Serial.println("Motor Control Ready.");
+  Serial.println("Enter 1 for Forward, 2 for Reverse, 0 to Stop");
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    char command = Serial.read();
+
+    if (command == '1') {
+      Serial.println("Moving Direction 1...");
+      digitalWrite(LPWM, LOW);
+      digitalWrite(RPWM, HIGH);
+    } 
+    else if (command == '2') {
+      Serial.println("Moving Direction 2...");
+      digitalWrite(RPWM, LOW);
+      digitalWrite(LPWM, HIGH);
+    } 
+    else if (command == '0') {
+      Serial.println("Stopping...");
+      digitalWrite(RPWM, LOW);
+      digitalWrite(LPWM, LOW);
+    }
+  }
+}
