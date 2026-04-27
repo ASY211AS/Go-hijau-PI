@@ -1,0 +1,88 @@
+// L298N Direction & Speed Calibrator - SENSOR UPGRADE
+// Safety: Motor stops if sensors at 23 AND 7 are LOW, or if Limit Switch 36 is LOW.
+
+const int IN3 = 40;
+const int IN4 = 42;
+const int ENB = 46;
+
+// Sensors (INPUT_PULLUP ensures they are HIGH when not triggered)
+const int SENSOR_A = 6;      
+const int SENSOR_B = 7;       
+const int LIMIT_SWITCH = 36;  
+
+int testSpeed = 130; // Increased slightly for reliable starting
+
+bool motorRunning = false;
+
+void setup() {
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  
+  // Initialize sensors with internal pullups
+  pinMode(SENSOR_A, INPUT_PULLUP);
+  pinMode(SENSOR_B, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH, INPUT_PULLUP);
+
+  Serial.begin(9600);
+  stopMotor();
+  
+  Serial.println("--- L298N Safety Test Ready ---");
+  Serial.println("Commands: 1 (FWD), 2 (REV), 0 (STOP)");
+  Serial.println("Safety: Stops if (23 && 7 are LOW) OR (36 is LOW)");
+  Serial.println("------------------------------");
+}
+
+void loop() {
+  // 1. Check Serial Commands
+  if (Serial.available() > 0) {
+    char cmd = Serial.read();
+    
+    if (cmd == '1') {
+      Serial.println("Command: Direction 1");
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+      analogWrite(ENB, testSpeed);
+      motorRunning = true;
+    } 
+    else if (cmd == '2') {
+      Serial.println("Command: Direction 2");
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
+      analogWrite(ENB, testSpeed);
+      motorRunning = true;
+    } 
+    else if (cmd == '0') {
+      stopMotor();
+    }
+  }
+
+  // 2. Safety Logic (Active Monitoring)
+  if (motorRunning) {
+    bool sensorATriggered = (digitalRead(SENSOR_A) == LOW);
+    bool sensorBTriggered = (digitalRead(SENSOR_B) == LOW);
+    bool limitTriggered = (digitalRead(LIMIT_SWITCH) == LOW);
+
+    // Stop if BOTH proximity sensors are triggered
+    if (sensorATriggered && sensorBTriggered) {
+      Serial.println("!!! STOP: BOTH Proximity Sensors (23 & 7) Detected !!!");
+      stopMotor();
+    }
+    
+    // OR Stop if the Limit Switch is triggered
+    else if (limitTriggered) {
+      Serial.println("!!! STOP: Limit Switch (36) Triggered !!!");
+      stopMotor();
+    }
+  }
+}
+
+void stopMotor() {
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENB, 0);
+  if (motorRunning) {
+    Serial.println("Motor Halted.");
+    motorRunning = false;
+  }
+}
